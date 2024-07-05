@@ -1,0 +1,55 @@
+---
+- name: Boxes setup
+  hosts: box1
+  become: yes
+  tasks:
+    - name: Update apt package cache
+      apt:
+        update_cache: yes
+
+- name: Install packages and users setup
+  hosts: box1
+  become: yes
+  vars:
+    packages: 
+      - tshark
+      - wireshark-common
+  tasks:
+    - name: Install required packages
+      apt:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ packages }}"
+      
+    - name: wireshark setuid
+      ansible.builtin.debconf:
+        name: wireshark-common
+        question: wireshark-common/install-setuid
+        value: yes
+        vtype: boolean
+      register: reconfigure_changed
+      
+    - name: make debconf changes active
+      ansible.builtin.command:
+        cmd: "dpkg-reconfigure wireshark-common"
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+      when: reconfigure_changed.changed
+
+    - name: Add 'dumpcap-user' and add to sudo group
+      user:
+        name: dumpcap-user
+        groups: sudo
+        append: yes
+        createhome: yes
+
+    - name: Create 'wireshark' group
+      group:
+        name: wireshark
+        state: present
+
+    - name: Add 'vagrant' to 'wireshark' group
+      user:
+        name: vagrant
+        groups: wireshark
+        append: yes
